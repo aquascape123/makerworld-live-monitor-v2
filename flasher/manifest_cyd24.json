@@ -1,0 +1,27 @@
+{
+  "name": "MakerWorld Monitor - CYD 2.4\"",
+  "version": "3.0.0-cyd24",
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "makerworld_monitor_cyd.ino.bootloader.bin",
+          "offset": 4096
+        },
+        {
+          "path": "makerworld_monitor_cyd.ino.partitions.bin",
+          "offset": 32768
+        },
+        {
+          "path": "boot_app0.bin",
+          "offset": 57344
+        },
+        {
+          "path": "makerworld_monitor_cyd.ino_cyd24.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}

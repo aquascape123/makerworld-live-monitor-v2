@@ -1,0 +1,4 @@
+TFT_eSPI
+ArduinoJson (7.x)
+WiFiManager (tzapu)
+PubSubClient

@@ -1,0 +1,14 @@
+# build output (the flasher .bin files ARE committed)
+*.elf
+*.map
+build/
+*.ino.cpp
+.vscode/
+.idea/
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+secrets.h
