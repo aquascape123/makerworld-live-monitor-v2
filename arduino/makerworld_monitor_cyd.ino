@@ -24,6 +24,7 @@
 
 // ============ PIN BUZZER ============
 #define BUZZER_PIN 22
+bool soundOn = true;   // interruttore Suono in /config
 
 // ============ OGGETTI ============
 TFT_eSPI tft = TFT_eSPI();
@@ -89,6 +90,7 @@ void setupBuzzer() {
 }
 
 void playBeep(int frequency, int duration) {
+  if (!soundOn) return;
   int period = 1000000L / frequency;
   int pulseWidth = period / 2;
   long cycles = frequency * duration / 1000;

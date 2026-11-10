@@ -1,6 +1,6 @@
 {
   "name": "MakerWorld Live Monitor",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "builds": [
     {
       "chipFamily": "ESP32",

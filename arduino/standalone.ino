@@ -50,6 +50,7 @@ void saLoadConfig() {
   sa.tgToken = p.getString("tgToken", "");
   sa.tgChat = p.getString("tgChat", "");
   sa.intervalMin = p.getUShort("interval", 15);
+  soundOn = p.getBool("sound", true);
   saBaselineCount = p.getInt("baseCount", 0);
   if (saBaselineCount > 0 && saBaselineCount <= SA_MAX_MODELS) {
     p.getBytes("baseline", saBaseline, sizeof(ModelCount) * saBaselineCount);
@@ -76,6 +77,7 @@ void saSaveConfig() {
   p.putString("tgToken", sa.tgToken);
   p.putString("tgChat", sa.tgChat);
   p.putUShort("interval", sa.intervalMin);
+  p.putBool("sound", soundOn);
   p.end();
 }
 
@@ -534,12 +536,16 @@ void saSendConfigPage(const String &message) {
   if (sa.uid.length()) html += "Profile ID: " + saHtmlEscape(sa.uid);
   html += F("</small><label>Check every (minutes, min 10)</label><input type='number' name='interval' min='10' max='240' value='");
   html += String(sa.intervalMin);
-  html += F("'><label>Telegram bot token (optional)</label><input type='text' name='tgToken' autocomplete='off' placeholder='");
+  html += F("'><label><input type='checkbox' name='sound' value='1'");
+  if (soundOn) html += " checked";
+  html += F("> Sound (buzzer on GPIO 22)</label><small>Beep at startup and on every notification.</small>"
+            "<label>Telegram bot token (optional)</label><input type='text' name='tgToken' autocomplete='off' placeholder='");
   html += sa.tgToken.length() ? F("saved - leave empty to keep it") : F("123456789:ABC...");
   html += F("'><small>Write <b>-</b> to remove it.</small><label>Telegram chat ID</label><input type='text' name='tgChat' value='");
   html += saHtmlEscape(sa.tgChat);
   html += F("'><button type='submit'>Save</button></form>"
             "<form method='POST' action='/check-now'><button type='submit' style='background:#2d6cdf'>Check now</button></form>"
+            "<form method='POST' action='/test-sound'><button type='submit' style='background:#555'>Play test sound</button></form>"
             "<form method='POST' action='/test-telegram'><button type='submit' style='background:#555'>Send Telegram test</button></form>"
             "<form method='POST' action='/simulate'><button type='submit' style='background:#7a4fd0'>Simulate 3 notifications</button></form>"
             "<p><a href='/mqtt'>Home Assistant (MQTT) &rarr;</a></p>"
@@ -569,6 +575,7 @@ void handleConfigPost() {
   if (interval < SA_MIN_INTERVAL_MIN) interval = SA_MIN_INTERVAL_MIN;
   if (interval > 240) interval = 240;
   sa.intervalMin = interval;
+  soundOn = server.hasArg("sound");
 
   String token = server.arg("tgToken");
   token.trim();
@@ -605,6 +612,12 @@ void handleCheckNow() {
   saSendConfigPage(sa.enabled ? "Check started: look at the display." : "Enable standalone mode first.");
 }
 
+void handleTestSound() {
+  if (!soundOn) { saSendConfigPage("Sound is off: tick <b>Sound</b> and press Save first."); return; }
+  playNotificationSound();
+  saSendConfigPage("Test sound played. Nothing heard? Check the buzzer on GPIO 22 and GND (it must be a passive buzzer).");
+}
+
 void handleTestTelegram() {
   bool ok = saTelegramSend("✅ MakerWorld Monitor: Telegram works!", "");
   saSendConfigPage(ok ? "Telegram test sent." : "Telegram test failed: check token and chat ID (and send /start to your bot).");
@@ -638,6 +651,7 @@ void saRegisterRoutes() {
   server.on("/config", HTTP_GET, handleConfigGet);
   server.on("/config", HTTP_POST, handleConfigPost);
   server.on("/check-now", HTTP_POST, handleCheckNow);
+  server.on("/test-sound", HTTP_POST, handleTestSound);
   server.on("/test-telegram", HTTP_POST, handleTestTelegram);
 }
 

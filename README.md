@@ -26,7 +26,7 @@ Your MakerWorld stats live on a small ESP32 "Cheap Yellow Display", with Telegra
 
 - **ESP32-2432S028R** (CYD 2.8") or **ESP32-2432S024** (CYD 2.4"), about $10-15 on AliExpress
 - USB-C cable and a 5 V USB power supply
-- Optional: passive buzzer on GPIO 22 for sound alerts
+- Optional: passive buzzer on GPIO 22 and GND for sound alerts (can be turned off in `/config`)
 
 ## 📦 Installation
 
@@ -63,9 +63,10 @@ Open `http://<CYD IP>/config` in a browser on the same network:
 
 - **MakerWorld username**: e.g. `@aquascape` (or paste your profile link)
 - **Check every**: 10-240 minutes (default 15)
+- **Sound**: turn the buzzer on or off (startup and notification beeps)
 - Press **Save**: the first check only saves the starting values, notifications start from the next change
 
-Useful buttons on the same page: **Check now**, **Send Telegram test**, **Simulate 3 notifications**.
+Useful buttons on the same page: **Check now**, **Play test sound**, **Send Telegram test**, **Simulate 3 notifications**.
 
 > ℹ️ **Points** are not shown in standalone mode: MakerWorld shows them only to the logged-in owner, and the display never stores your MakerWorld password. The fourth tile shows your **Likes** instead.
 
@@ -120,10 +121,11 @@ A desk case tilted by 15°, with a two-tone ring around the screen, slots under 
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/config` | GET/POST | Setup page (profile, interval, Telegram) |
+| `/config` | GET/POST | Setup page (profile, interval, sound, Telegram) |
 | `/mqtt` | GET/POST | Home Assistant / MQTT settings |
 | `/check-now` | POST | Check MakerWorld now |
 | `/simulate` | POST | Show 3 test notifications with real models |
+| `/test-sound` | POST | Play the notification sound |
 | `/test-telegram` | POST | Send a Telegram test message |
 | `/stats` | GET | Current totals (JSON) |
 | `/screenshot` | GET | Screenshot of the display (BMP) |

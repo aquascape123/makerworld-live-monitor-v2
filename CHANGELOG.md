@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.1
+
+### Added
+- Sound on/off switch and *Play test sound* button in `/config` (buzzer on GPIO 22)
+
 ## 3.0.0 - first release of v2
 
 ### Added
