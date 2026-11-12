@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <WiFiManager.h>
+#include <PNGdec.h>      // copertina del modello nelle notifiche (ui_cover.ino)
 #include "standalone.h"
 
 // ============ SCHEDA ============
@@ -49,6 +50,7 @@ struct Notification {
   float value;    // CAMBIATO DA int A float
   float total;    // CAMBIATO DA int A float
   float points;   // CAMBIATO DA int A float
+  String coverUrl;  // foto del modello (solo modalita' autonoma)
   unsigned long timestamp;
   bool active = false;
 } currentNotif;

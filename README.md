@@ -17,6 +17,7 @@ Your MakerWorld stats live on a small ESP32 "Cheap Yellow Display", with Telegra
 - **Exact totals**: Downloads, Prints, Boosts and Likes are the same numbers shown on your MakerWorld profile (the site rounds them, e.g. 19.2k; the display shows the exact value, e.g. 19.170).
 - **New high-contrast interface**: bold fonts, big numbers, one color per stat, readable from across the room.
 - **Notification queue**: several events at once are shown one after the other, none is lost.
+- **Model photo in the notification**: the cover of the downloaded, printed or boosted model appears next to its name.
 - **Telegram** straight from the display, with the model cover photo.
 - **Home Assistant (MQTT)**: sensors appear automatically, plus an event entity for your automations.
 - **CYD 2.4" support** (ESP32-2432S024), besides the classic 2.8" (ESP32-2432S028R).
@@ -46,7 +47,7 @@ Your MakerWorld stats live on a small ESP32 "Cheap Yellow Display", with Telegra
 <summary>Build it yourself</summary>
 
 1. Install the **esp32** boards (Espressif) in the Boards Manager and select **ESP32 Dev Module**
-2. Install the libraries: **TFT_eSPI**, **ArduinoJson** (v7), **WiFiManager**, **PubSubClient**
+2. Install the libraries: **TFT_eSPI**, **ArduinoJson** (v7), **WiFiManager**, **PubSubClient**, **PNGdec**
 3. Configure TFT_eSPI for the CYD (ILI9341, HSPI: MISO 12, MOSI 13, SCLK 14, CS 15, DC 2, backlight 21) with `TFT_INVERSION_ON`
 4. For the **2.4"** board add `#define CYD_24` at the top of `makerworld_monitor_cyd.ino` (backlight on GPIO 27, screen rotated 180°)
 5. Open `arduino/makerworld_monitor_cyd.ino` and upload

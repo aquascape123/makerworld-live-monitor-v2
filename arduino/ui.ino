@@ -10,6 +10,8 @@
 #define UI_LINE    0x4208   // grigio scuro per le linee
 #define UI_TEXT    0xFFFF   // bianco
 #define UI_MUTED   0xC618   // grigio chiaro (#C0C0C0)
+// Copertina del modello nelle notifiche (disegnata da ui_cover.ino)
+const int COVER_X = 168, COVER_Y = 54, COVER_W = 140, COVER_H = 105;
 #define UI_GREEN   0x07E0
 #define UI_CYAN    0x07FF
 #define UI_YELLOW  0xFFE0
@@ -376,10 +378,13 @@ void showNotification() {
   else if (type == "boost") { color = UI_YELLOW; title = "NEW BOOST"; }
   uiNotifHeader(title, type, color);
 
-  // Nome del modello: bianco, grassetto, fino a 3 righe
+  // Nome del modello: bianco, grassetto. Con la foto sta nella colonna di
+  // sinistra (fino a 4 righe), senza foto usa tutta la larghezza.
+  bool withCover = currentNotif.coverUrl.length() > 0;
   tft.setFreeFont(UI_FONT_M);
   tft.setTextColor(UI_TEXT);
-  uiDrawWrapped(currentNotif.modelName, 12, 56, 296, 26, 3);
+  if (withCover) uiDrawWrapped(currentNotif.modelName, 12, 56, COVER_X - 18, 26, 4);
+  else uiDrawWrapped(currentNotif.modelName, 12, 56, 296, 26, 3);
 
   // Valore grande in basso a sinistra, totale a destra
   tft.setFreeFont(UI_FONT_XL);
@@ -402,6 +407,9 @@ void showNotification() {
     tft.setTextDatum(BL_DATUM);
     tft.drawString("+" + String(currentNotif.points, 0) + " points", 34, 234);
   }
+
+  // La foto arriva per ultima (circa 1 secondo): il testo e' gia' visibile
+  if (withCover) coverDraw(currentNotif.coverUrl);
 
   uiBlinkBorder(color);
   blinkRed(2, 100);

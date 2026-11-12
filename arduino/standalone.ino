@@ -442,6 +442,7 @@ bool saCheckNow() {
       n.modelName = e.title;
       n.value = e.value;
       n.total = e.total;
+      n.coverUrl = e.coverUrl;
       n.points = e.type == "download" ? e.value : (e.type == "print" ? e.value * 2 : 0);
       enqueueNotification(n);
     }

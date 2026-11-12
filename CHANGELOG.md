@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.0
+
+### Added
+- Model cover photo in the download / print / boost notifications (standalone mode)
+
 ## 3.0.1
 
 ### Added
