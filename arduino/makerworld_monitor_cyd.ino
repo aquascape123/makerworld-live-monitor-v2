@@ -26,6 +26,8 @@
 // ============ PIN BUZZER ============
 #define BUZZER_PIN 22
 bool soundOn = true;   // interruttore Suono in /config
+bool screenFlip = false;   // casella "Rotate screen 180" in /config (schede montate al contrario)
+#define screenRotation() (screenFlip ? (SCREEN_ROTATION + 2) % 4 : SCREEN_ROTATION)
 
 // ============ OGGETTI ============
 TFT_eSPI tft = TFT_eSPI();
@@ -293,7 +295,7 @@ void setup() {
   ledOff();
   
   tft.init();
-  tft.setRotation(SCREEN_ROTATION);
+  tft.setRotation(screenRotation());
   tft.fillScreen(COLOR_BG_TOP);
   tft.setTextColor(COLOR_TEXT, COLOR_BG_TOP);
   

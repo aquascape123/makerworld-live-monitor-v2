@@ -65,6 +65,7 @@ Open `http://<CYD IP>/config` in a browser on the same network:
 - **MakerWorld username**: e.g. `@aquascape` (or paste your profile link)
 - **Check every**: 10-240 minutes (default 15)
 - **Sound**: turn the buzzer on or off (startup and notification beeps)
+- **Rotate screen 180°**: tick it if the screen is upside down in the case
 - Press **Save**: the first check only saves the starting values, notifications start from the next change
 
 Useful buttons on the same page: **Check now**, **Play test sound**, **Send Telegram test**, **Simulate 3 notifications**.
@@ -122,7 +123,7 @@ A desk case tilted by 15°, with a two-tone ring around the screen, slots under 
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/config` | GET/POST | Setup page (profile, interval, sound, Telegram) |
+| `/config` | GET/POST | Setup page (profile, interval, sound, screen rotation, Telegram) |
 | `/mqtt` | GET/POST | Home Assistant / MQTT settings |
 | `/check-now` | POST | Check MakerWorld now |
 | `/simulate` | POST | Show 3 test notifications with real models |
@@ -140,6 +141,7 @@ The `/notify` and `/sync` endpoints of v1 are still there, so the old browser ex
 
 - **Screen black, LED on** → you have a CYD 2.4": flash the *CYD 2.4"* firmware
 - **Wrong colors** → flash the *Color Fix* firmware
+- **Screen upside down in the case** → tick *Rotate screen 180°* in `http://<CYD IP>/config`
 - **Footer says "open /config to start"** → set your MakerWorld username in `http://<CYD IP>/config`
 - **Footer shows "HTTP -1"** → no internet connection: the CYD reconnects and, after 3 failures in a row, restarts by itself
 - **No Telegram messages** → send `/start` to your bot and use *Send Telegram test*

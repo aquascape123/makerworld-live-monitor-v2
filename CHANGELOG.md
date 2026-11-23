@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.0
+
+### Added
+- *Rotate screen 180°* option in `/config`, for boards that show the screen upside down in the case
+
 ## 3.1.0
 
 ### Added

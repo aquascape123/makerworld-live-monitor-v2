@@ -51,6 +51,7 @@ void saLoadConfig() {
   sa.tgChat = p.getString("tgChat", "");
   sa.intervalMin = p.getUShort("interval", 15);
   soundOn = p.getBool("sound", true);
+  screenFlip = p.getBool("flip", false);
   saBaselineCount = p.getInt("baseCount", 0);
   if (saBaselineCount > 0 && saBaselineCount <= SA_MAX_MODELS) {
     p.getBytes("baseline", saBaseline, sizeof(ModelCount) * saBaselineCount);
@@ -78,6 +79,7 @@ void saSaveConfig() {
   p.putString("tgChat", sa.tgChat);
   p.putUShort("interval", sa.intervalMin);
   p.putBool("sound", soundOn);
+  p.putBool("flip", screenFlip);
   p.end();
 }
 
@@ -540,6 +542,9 @@ void saSendConfigPage(const String &message) {
   html += F("'><label><input type='checkbox' name='sound' value='1'");
   if (soundOn) html += " checked";
   html += F("> Sound (buzzer on GPIO 22)</label><small>Beep at startup and on every notification.</small>"
+            "<label><input type='checkbox' name='flip' value='1'");
+  if (screenFlip) html += " checked";
+  html += F("> Rotate screen 180&deg;</label><small>Tick it if the screen is upside down in the case.</small>"
             "<label>Telegram bot token (optional)</label><input type='text' name='tgToken' autocomplete='off' placeholder='");
   html += sa.tgToken.length() ? F("saved - leave empty to keep it") : F("123456789:ABC...");
   html += F("'><small>Write <b>-</b> to remove it.</small><label>Telegram chat ID</label><input type='text' name='tgChat' value='");
@@ -577,6 +582,8 @@ void handleConfigPost() {
   if (interval > 240) interval = 240;
   sa.intervalMin = interval;
   soundOn = server.hasArg("sound");
+  bool wasFlipped = screenFlip;
+  screenFlip = server.hasArg("flip");
 
   String token = server.arg("tgToken");
   token.trim();
@@ -597,6 +604,10 @@ void handleConfigPost() {
   }
 
   saSaveConfig();
+  if (screenFlip != wasFlipped) {   // si gira subito, senza riavviare
+    tft.setRotation(screenRotation());
+    if (!currentNotif.active) showMainScreen();
+  }
   if (sa.enabled != wasEnabled) mqttReconnectNow();  // Home Assistant: like o punti cambiano
   if (message.length() == 0) {
     message = "Saved.";
