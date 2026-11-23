@@ -113,13 +113,11 @@ void mqttPublishDiscovery() {
   // il sensore che non ha dati viene tolto da Home Assistant (config vuota).
   String likesTopic = mq.prefix + "/sensor/" + mqttId + "/likes/config";
   String pointsTopic = mq.prefix + "/sensor/" + mqttId + "/points/config";
-  if (saIsEnabled()) {
-    mqttDiscoverSensor("likes", "Likes", "mdi:heart");
-    mqttClient.publish(pointsTopic.c_str(), "", true);
-  } else {
-    mqttDiscoverSensor("points", "Points", "mdi:star");
-    mqttClient.publish(likesTopic.c_str(), "", true);
-  }
+  // Con l'accesso MakerWorld (in /config) ci sono sia Like che Punti.
+  if (saIsEnabled()) mqttDiscoverSensor("likes", "Likes", "mdi:heart");
+  else mqttClient.publish(likesTopic.c_str(), "", true);
+  if (!saIsEnabled() || mwLoggedIn()) mqttDiscoverSensor("points", "Points", "mdi:star");
+  else mqttClient.publish(pointsTopic.c_str(), "", true);
 
   // Entita' "evento": scatta a ogni notifica, utile per le automazioni
   String topic = mq.prefix + "/event/" + mqttId + "/activity/config";
@@ -145,7 +143,7 @@ void mqttPublishState() {
   doc["prints"] = stats.totalPrints;
   doc["boosts"] = stats.totalBoosts;
   if (saIsEnabled()) doc["likes"] = stats.totalLikes;
-  else doc["points"] = serialized(String(stats.totalPoints, 2));
+  if (!saIsEnabled() || mwPointsKnown()) doc["points"] = serialized(String(stats.totalPoints, 2));
   doc["account"] = stats.accountName;
   if (mqttPublishJson(mqttBase + "/state", doc, true)) mqttDirty = false;
 }

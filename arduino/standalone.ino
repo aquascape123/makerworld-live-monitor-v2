@@ -26,6 +26,17 @@ struct StandaloneConfig {
   uint16_t intervalMin = 15;
 } sa;
 
+// Accesso MakerWorld facoltativo (solo per i punti): vedi in fondo al file
+struct MwAuth {
+  String email;
+  String access;         // lasciapassare Bambu Lab (mai mostrato nella pagina)
+  String refresh;        // per rinnovarlo
+  uint32_t savedAt = 0;  // ora (epoch) dell'ultimo lasciapassare, 0 = sconosciuta
+  bool pointsKnown = false;
+} mwa;
+String mwBearer = "";    // se non vuoto, saGetJson manda "Authorization: Bearer ..."
+String mwStatus = "";
+
 ModelCount saBaseline[SA_MAX_MODELS];
 int saBaselineCount = 0;
 ModelCount saCurrent[SA_MAX_MODELS];
@@ -60,6 +71,7 @@ void saLoadConfig() {
   }
   p.end();
   if (sa.intervalMin < SA_MIN_INTERVAL_MIN) sa.intervalMin = SA_MIN_INTERVAL_MIN;
+  mwLoad();
 
   Serial.print("Standalone mode: ");
   Serial.print(sa.enabled ? "ON" : "OFF");
@@ -135,6 +147,7 @@ int saGetJson(const String &url, JsonDocument &filter, JsonDocument &doc, String
     error = "connection failed";
     return -1;
   }
+  if (mwBearer.length()) http.addHeader("Authorization", "Bearer " + mwBearer);
   unsigned long t0 = millis();
   int code = http.GET();
   Serial.printf("[SA] GET %s -> %d in %lu ms\n", url.substring(26, 80).c_str(), code, millis() - t0);
@@ -423,6 +436,23 @@ bool saCheckNow() {
   }
   Serial.printf("Totals: downloads=%d prints=%d boosts=%d likes=%ld\n",
                 stats.totalDownloads, stats.totalPrints, stats.totalBoosts, stats.totalLikes);
+
+  // Punti: solo se l'utente ha fatto l'accesso in /config
+  float oldPoints = stats.totalPoints, newPoints = 0;
+  bool pointsEvent = false;
+  if (mwLoggedIn()) {
+    String pointsError;
+    if (mwFetchPoints(newPoints, pointsError)) {
+      pointsEvent = mwa.pointsKnown && newPoints > oldPoints + 0.001f;
+      stats.totalPoints = newPoints;
+      if (!mwa.pointsKnown) { mwa.pointsKnown = true; mwSave(); }
+      mwStatus = "";
+      Serial.printf("Points: %.3f\n", newPoints);
+    } else {
+      mwStatus = "Points: " + pointsError;
+      Serial.println(mwStatus);
+    }
+  }
   stats.initialized = true;
   saveStats();
 
@@ -451,6 +481,15 @@ bool saCheckNow() {
     for (int i = 0; i < saPendingCount; i++) {
       saTelegramSend(saTelegramText(saPending[i]), saPending[i].coverUrl);
     }
+  }
+  if (pointsEvent) {
+    Notification n;
+    n.type = "points";
+    n.value = newPoints - oldPoints;
+    n.total = oldPoints;
+    n.points = newPoints;
+    enqueueNotification(n);
+    saTelegramSend("⭐ New points: +" + String(newPoints - oldPoints, 2) + "\n\nTotal: " + String(newPoints, 2), "");
   }
 
   saStatus = "AUTO: " + String(saCurrentCount) + " models";
@@ -521,7 +560,7 @@ void saSendConfigPage(const String &message) {
                   "body{font-family:system-ui,Arial;background:#0f2027;color:#eee;margin:0;padding:20px}"
                   ".box{max-width:480px;margin:auto;background:#1a3a3a;padding:20px;border-radius:12px}"
                   "h1{color:#00ff88;font-size:1.4em;margin-top:0}label{display:block;margin:14px 0 4px;font-weight:600}"
-                  "input[type=text],input[type=number]{width:100%;padding:10px;border-radius:8px;border:0;box-sizing:border-box;font-size:1em}"
+                  "input[type=text],input[type=number],input[type=email]{width:100%;padding:10px;border-radius:8px;border:0;box-sizing:border-box;font-size:1em}"
                   "small{color:#9bb}.msg{background:#264d40;padding:10px;border-radius:8px;margin-bottom:10px}"
                   "button{margin-top:18px;width:100%;padding:12px;border:0;border-radius:8px;background:#00c070;color:#fff;font-size:1.05em;font-weight:700}"
                   "a{color:#00ff88}</style></head><body><div class='box'>"
@@ -531,7 +570,7 @@ void saSendConfigPage(const String &message) {
             "<label><input type='checkbox' name='enabled' value='1'");
   if (sa.enabled) html += " checked";
   html += F("> Standalone mode (no browser extension)</label>"
-            "<small>The display reads MakerWorld by itself. Points are not available in this mode.</small>"
+            "<small>The display reads MakerWorld by itself. For the points, log in at the bottom of this page.</small>"
             "<label>MakerWorld username</label>"
             "<input type='text' name='handle' placeholder='@yourname' value='");
   html += saHtmlEscape(sa.handle);
@@ -553,8 +592,9 @@ void saSendConfigPage(const String &message) {
             "<form method='POST' action='/check-now'><button type='submit' style='background:#2d6cdf'>Check now</button></form>"
             "<form method='POST' action='/test-sound'><button type='submit' style='background:#555'>Play test sound</button></form>"
             "<form method='POST' action='/test-telegram'><button type='submit' style='background:#555'>Send Telegram test</button></form>"
-            "<form method='POST' action='/simulate'><button type='submit' style='background:#7a4fd0'>Simulate 3 notifications</button></form>"
-            "<p><a href='/mqtt'>Home Assistant (MQTT) &rarr;</a></p>"
+            "<form method='POST' action='/simulate'><button type='submit' style='background:#7a4fd0'>Simulate 3 notifications</button></form>");
+  html += mwConfigSection();
+  html += F("<p><a href='/mqtt'>Home Assistant (MQTT) &rarr;</a></p>"
             "<p><small>");
   html += saHtmlEscape(saStatus);
   html += F("</small></p></div></body></html>");
@@ -653,9 +693,11 @@ void handleSimulateChanges() {
   if (d >= 0) saBaseline[d].downloads -= 2;
   if (pr >= 0) saBaseline[pr].prints -= 1;
   if (b >= 0) saBaseline[b].boosts -= 1;
+  if (mwPointsKnown()) stats.totalPoints -= 5;   // con l'accesso: anche una notifica "+5 punti"
   saSaveBaseline();
   saCheckRequested = true;
-  saSendConfigPage("Test started: in a few seconds you should see 3 notifications (download, print, boost).");
+  saSendConfigPage(mwPointsKnown() ? "Test started: in a few seconds you should see 4 notifications (download, print, boost, points)."
+                                   : "Test started: in a few seconds you should see 3 notifications (download, print, boost).");
 }
 
 void saRegisterRoutes() {
@@ -665,6 +707,9 @@ void saRegisterRoutes() {
   server.on("/check-now", HTTP_POST, handleCheckNow);
   server.on("/test-sound", HTTP_POST, handleTestSound);
   server.on("/test-telegram", HTTP_POST, handleTestTelegram);
+  server.on("/mw-send-code", HTTP_POST, handleMwSendCode);
+  server.on("/mw-login", HTTP_POST, handleMwLogin);
+  server.on("/mw-logout", HTTP_POST, handleMwLogout);
 }
 
 bool saIsEnabled() {
@@ -673,4 +718,224 @@ bool saIsEnabled() {
 
 String saGetStatus() {
   return saStatus;
+}
+
+// ============================================
+// ACCESSO MAKERWORLD (facoltativo, solo per i punti)
+// ============================================
+// L'accesso si fa con l'email e un codice che Bambu Lab manda per email:
+// la password non serve e non viene mai chiesta. Si salva solo il
+// lasciapassare (valido 90 giorni), che il CYD rinnova da solo.
+
+#define MW_API "https://api.bambulab.com/v1/user-service/user/"
+const uint32_t MW_RENEW_AFTER_S = 20UL * 24UL * 3600UL;   // rinnovo ogni 20 giorni
+bool mwNtpStarted = false;
+
+void mwLoad() {
+  Preferences p;
+  p.begin("mwauth", true);
+  mwa.email = p.getString("email", "");
+  mwa.access = p.getString("access", "");
+  mwa.refresh = p.getString("refresh", "");
+  mwa.savedAt = p.getUInt("savedAt", 0);
+  mwa.pointsKnown = p.getBool("ptsOk", false);
+  p.end();
+  Serial.printf("MakerWorld login: %s\n", mwa.access.length() ? "yes" : "no");
+}
+
+void mwSave() {
+  Preferences p;
+  p.begin("mwauth", false);
+  p.putString("email", mwa.email);
+  p.putString("access", mwa.access);
+  p.putString("refresh", mwa.refresh);
+  p.putUInt("savedAt", mwa.savedAt);
+  p.putBool("ptsOk", mwa.pointsKnown);
+  p.end();
+}
+
+bool mwLoggedIn() { return mwa.access.length() > 0; }
+bool mwPointsKnown() { return mwLoggedIn() && mwa.pointsKnown; }
+
+uint32_t mwNow() {
+  time_t t = time(nullptr);
+  return t > 1700000000 ? (uint32_t)t : 0;
+}
+
+// POST JSON verso Bambu Lab: restituisce il codice HTTP
+int mwPost(const char *path, JsonDocument &body, JsonDocument &resp) {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.setTimeout(15000);
+  http.setUserAgent(SA_USER_AGENT);
+  if (!http.begin(client, String(MW_API) + path)) return -1;
+  http.addHeader("Content-Type", "application/json");
+  String out;
+  serializeJson(body, out);
+  int code = http.POST(out);
+  String in = code > 0 ? http.getString() : "";
+  http.end();
+  resp.clear();
+  deserializeJson(resp, in);
+  Serial.printf("[MW] POST %s -> %d\n", path, code);
+  return code;
+}
+
+String mwError(int code, JsonDocument &r) {
+  String e = "Bambu Lab HTTP " + String(code);
+  String m = r["error"] | "";
+  if (m.length()) e += ": " + m;
+  return e;
+}
+
+bool mwStoreTokens(JsonDocument &r) {
+  String a = r["accessToken"] | "";
+  if (a.length() == 0) return false;
+  mwa.access = a;
+  mwa.refresh = r["refreshToken"] | "";
+  mwa.savedAt = mwNow();
+  mwSave();
+  return true;
+}
+
+bool mwSendCode(const String &email, String &error) {
+  JsonDocument b, r;
+  b["email"] = email;
+  b["type"] = "codeLogin";
+  int code = mwPost("sendemail/code", b, r);
+  if (code == 200) return true;
+  error = mwError(code, r);
+  return false;
+}
+
+bool mwLoginWithCode(const String &email, const String &emailCode, String &error) {
+  JsonDocument b, r;
+  b["account"] = email;
+  b["code"] = emailCode;
+  int code = mwPost("login", b, r);
+  if (code == 200 && mwStoreTokens(r)) {
+    mwa.pointsKnown = false;
+    mwSave();
+    return true;
+  }
+  if (code == 200) error = String("login not accepted (") + (const char *)(r["loginType"] | "?") + ")";
+  else error = mwError(code, r);
+  return false;
+}
+
+bool mwRenew() {
+  if (mwa.refresh.length() == 0) return false;
+  JsonDocument b, r;
+  b["refreshToken"] = mwa.refresh;
+  int code = mwPost("refreshtoken", b, r);
+  bool ok = code == 200 && mwStoreTokens(r);
+  Serial.println(ok ? "[MW] login renewed" : "[MW] login renewal failed");
+  return ok;
+}
+
+void mwLogout() {
+  mwa.access = "";
+  mwa.refresh = "";
+  mwa.savedAt = 0;
+  mwa.pointsKnown = false;
+  mwSave();
+}
+
+// Legge il saldo punti dal profilo (serve l'accesso)
+bool mwFetchPoints(float &points, String &error) {
+  if (!mwNtpStarted) {   // l'ora serve per sapere quando rinnovare
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    mwNtpStarted = true;
+  }
+  uint32_t now = mwNow();
+  if (now && !mwa.savedAt) { mwa.savedAt = now; mwSave(); }
+  if (now && mwa.savedAt && now - mwa.savedAt > MW_RENEW_AFTER_S) mwRenew();
+
+  for (int attempt = 0; attempt < 2; attempt++) {
+    JsonDocument filter, doc;
+    filter["point"] = true;
+    mwBearer = mwa.access;
+    int code = saGetJson("https://makerworld.com/api/v1/design-user-service/my/profile", filter, doc, error);
+    mwBearer = "";
+    if (code == 200) {
+      if (doc["point"].isNull()) { error = "points missing"; return false; }
+      points = doc["point"].as<float>();
+      return true;
+    }
+    if (code != 401) return false;
+    if (attempt == 0 && mwRenew()) continue;   // lasciapassare scaduto: si rinnova
+    mwLogout();
+    mwReconnectHa();
+    error = "login expired: log in again";
+    return false;
+  }
+  return false;
+}
+
+void mwReconnectHa() { mqttReconnectNow(); }   // Home Assistant: compare/sparisce il sensore Punti
+
+String mwConfigSection() {
+  String h = F("<h2 style='font-size:1.1em;color:#00ff88;margin-top:26px'>MakerWorld login "
+               "<small>(optional, only for points)</small></h2>");
+  if (mwLoggedIn()) {
+    h += "<p>Logged in as <b>" + saHtmlEscape(mwa.email) + "</b>";
+    if (mwa.pointsKnown) h += "<br>Points: <b>" + String(stats.totalPoints, 2) + "</b>";
+    h += F("</p><form method='POST' action='/mw-logout'><button type='submit' style='background:#a33'>Log out</button></form>");
+  } else {
+    h += F("<form method='POST' action='/mw-send-code'><label>Email of your Bambu Lab / MakerWorld account</label>"
+           "<input type='email' name='email' autocomplete='email' value='");
+    h += saHtmlEscape(mwa.email);
+    h += F("'><button type='submit' style='background:#2d6cdf'>1. Send code by email</button></form>"
+           "<form method='POST' action='/mw-login'><label>Code received by email</label>"
+           "<input type='text' name='code' inputmode='numeric' autocomplete='one-time-code'>"
+           "<button type='submit'>2. Log in</button></form>"
+           "<small>No password needed. The display keeps only a login token (valid 90 days, renewed "
+           "automatically); <b>Log out</b> deletes it. Signed up with Google or Apple? Use the email of that account.</small>");
+  }
+  if (mwStatus.length()) h += "<p><small>" + saHtmlEscape(mwStatus) + "</small></p>";
+  return h;
+}
+
+void handleMwSendCode() {
+  String email = server.arg("email");
+  email.trim();
+  if (email.indexOf('@') < 1) { saSendConfigPage("Write the email of your account first."); return; }
+  mwa.email = email;
+  mwSave();
+  String error;
+  if (mwSendCode(email, error)) {
+    mwStatus = "";
+    saSendConfigPage("Code sent to " + saHtmlEscape(email) + ": check your email (also the spam folder) and type it below.");
+  } else {
+    mwStatus = error;
+    saSendConfigPage("Could not send the code: " + saHtmlEscape(error));
+  }
+}
+
+void handleMwLogin() {
+  String emailCode = server.arg("code");
+  emailCode.trim();
+  if (mwa.email.length() == 0 || emailCode.length() == 0) {
+    saSendConfigPage("Send the code first, then type it here.");
+    return;
+  }
+  String error;
+  if (mwLoginWithCode(mwa.email, emailCode, error)) {
+    mwStatus = "";
+    saCheckRequested = true;
+    mwReconnectHa();
+    saSendConfigPage("Logged in! Your points will appear on the display in a few seconds.");
+  } else {
+    mwStatus = error;
+    saSendConfigPage("Login failed: " + saHtmlEscape(error));
+  }
+}
+
+void handleMwLogout() {
+  mwLogout();
+  mwStatus = "";
+  mwReconnectHa();
+  if (!currentNotif.active) updateStatsDisplay();
+  saSendConfigPage("Logged out: the login token has been deleted from the display.");
 }

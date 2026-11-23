@@ -70,7 +70,19 @@ Open `http://<CYD IP>/config` in a browser on the same network:
 
 Useful buttons on the same page: **Check now**, **Play test sound**, **Send Telegram test**, **Simulate 3 notifications**.
 
-> ℹ️ **Points** are not shown in standalone mode: MakerWorld shows them only to the logged-in owner, and the display never stores your MakerWorld password. The fourth tile shows your **Likes** instead.
+> ℹ️ Without logging in, the fourth tile shows your **Likes**: MakerWorld shows the **Points** only to the logged-in owner. To see them, use the optional login below.
+
+### 🔑 Points (optional MakerWorld login)
+At the bottom of `http://<CYD IP>/config`, in **MakerWorld login**:
+
+1. Type the email of your Bambu Lab / MakerWorld account and press **Send code by email**
+2. Type the code you receive by email and press **Log in**
+
+The fourth tile switches from Likes to **Points**, and you get a notification (and a Telegram message) every time your points go up.
+
+- **No password needed**: the login uses only the email code. If you signed up with Google or Apple, use the email of that account.
+- The display keeps only a login token (valid 90 days, renewed automatically). **Log out** deletes it.
+- If the login expires, the display goes back to Likes and the page asks you to log in again.
 
 ### 3️⃣ Telegram (optional)
 1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and copy the **token**
@@ -86,7 +98,8 @@ With MQTT discovery these entities appear by themselves under the device **Maker
 |---|---|
 | Downloads, Prints, Boosts | profile totals |
 | Likes | total likes (standalone mode) |
-| Activity | event entity: `download`, `print`, `boost` with model name and amount |
+| Points | points balance (with the MakerWorld login, or with the v1 extension) |
+| Activity | event entity: `download`, `print`, `boost`, `points` with model name and amount |
 
 Topics: `makerworld/<id>/state` (JSON, retained), `makerworld/<id>/event`, `makerworld/<id>/status` (`online`/`offline`).
 
@@ -128,6 +141,7 @@ A desk case tilted by 15°, with a two-tone ring around the screen, slots under 
 | `/check-now` | POST | Check MakerWorld now |
 | `/simulate` | POST | Show 3 test notifications with real models |
 | `/test-sound` | POST | Play the notification sound |
+| `/mw-send-code`, `/mw-login`, `/mw-logout` | POST | Optional MakerWorld login (points) |
 | `/test-telegram` | POST | Send a Telegram test message |
 | `/stats` | GET | Current totals (JSON) |
 | `/screenshot` | GET | Screenshot of the display (BMP) |

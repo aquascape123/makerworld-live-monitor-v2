@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.3.0
+
+### Added
+- Optional MakerWorld login in `/config` (email + code, no password): the fourth tile shows the **Points**, with a notification and a Telegram message when they go up, and a Points sensor in Home Assistant
+- *Simulate* also shows a points notification when logged in
+
+### Fixed
+- Downloads, Prints and Boosts disappeared when the fourth tile switched between Likes and Points
+
 ## 3.2.0
 
 ### Added

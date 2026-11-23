@@ -106,7 +106,7 @@ void uiTileInfo(int i, const char *&label, const char *&type, uint16_t &color) {
     case 1: label = "Prints";    type = "print";    color = UI_CYAN; break;
     case 2: label = "Boosts";    type = "boost";    color = UI_YELLOW; break;
     default:
-      if (saIsEnabled()) { label = "Likes"; type = "like"; color = UI_MAGENTA; }
+      if (!uiFourthIsPoints()) { label = "Likes"; type = "like"; color = UI_MAGENTA; }
       else { label = "Points"; type = "points"; color = UI_ORANGE; }
   }
 }
@@ -213,15 +213,16 @@ void updateStatsDisplay() {
   if (currentNotif.active) return;
 
   // Riquadro 4 cambiato (Likes <-> Points): si ridisegna la cornice
-  static bool lastStandalone = false;
-  if (saIsEnabled() != lastStandalone) {
-    lastStandalone = saIsEnabled();
+  static int lastKind = -1;
+  if ((int)uiFourthIsPoints() != lastKind) {
+    lastKind = uiFourthIsPoints();
     uiFramesDrawn = false;
     uiLastValue[3] = "";
   }
 
   if (!uiFramesDrawn) {
     for (int i = 0; i < 4; i++) uiDrawTileFrame(i);
+    for (int i = 0; i < 4; i++) uiLastValue[i] = "";   // la cornice cancella anche i numeri
     uiFramesDrawn = true;
   }
 
@@ -229,7 +230,8 @@ void updateStatsDisplay() {
     formatThousands(stats.totalDownloads),
     formatThousands(stats.totalPrints),
     formatThousands(stats.totalBoosts),
-    saIsEnabled() ? formatThousands(stats.totalLikes) : String(stats.totalPoints, 2)
+    !uiFourthIsPoints() ? formatThousands(stats.totalLikes)
+      : (saIsEnabled() && !mwPointsKnown()) ? String("...") : formatPoints(stats.totalPoints)
   };
   for (int i = 0; i < 4; i++) {
     if (values[i] != uiLastValue[i]) {
@@ -337,10 +339,10 @@ void showNotification() {
     tft.setFreeFont(UI_FONT_XL);
     tft.setTextColor(UI_ORANGE);
     tft.setTextDatum(MC_DATUM);
-    tft.drawString("+" + String(currentNotif.value, 2), 160, 100);
+    tft.drawString("+" + formatPoints(currentNotif.value), 160, 100);
     tft.setFreeFont(UI_FONT_M);
     tft.setTextColor(UI_TEXT);
-    tft.drawString(String(currentNotif.total, 2) + "  >  " + String(currentNotif.points, 2), 160, 160);
+    tft.drawString(formatPoints(currentNotif.total) + "  >  " + formatPoints(currentNotif.points), 160, 160);
     tft.setTextFont(2);
     tft.setTextColor(UI_MUTED);
     tft.drawString("before  >  after", 160, 190);
@@ -413,4 +415,16 @@ void showNotification() {
 
   uiBlinkBorder(color);
   blinkRed(2, 100);
+}
+
+// Riquadro 4: Points con l'estensione o con l'accesso MakerWorld, altrimenti Likes
+bool uiFourthIsPoints() {
+  return !saIsEnabled() || mwLoggedIn();
+}
+
+// Punti: interi senza decimali (156), altrimenti con due (38.75)
+String formatPoints(float p) {
+  long whole = (long)(p + (p >= 0 ? 0.005f : -0.005f));
+  if (fabsf(p - whole) < 0.005f) return formatThousands(whole);
+  return String(p, 2);
 }
