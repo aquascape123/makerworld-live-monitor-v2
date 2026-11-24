@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.4.0
+
+### Added
+- **Display tiles** in `/config`: choose from 1 to 8 tiles and their order (Downloads, Prints, Boosts, Points, Followers, Likes, Collections, Models); the layout adapts to the number of tiles
+- *New follower* notification on the display and on Telegram, Followers sensor and `follower` event in Home Assistant
+- *Simulate* also shows a new follower notification
+
 ## 3.3.0
 
 ### Added

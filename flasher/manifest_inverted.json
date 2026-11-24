@@ -1,6 +1,6 @@
 {
   "name": "MakerWorld Monitor - Color Fix",
-  "version": "3.3.0-colorfix",
+  "version": "3.4.0-colorfix",
   "builds": [
     {
       "chipFamily": "ESP32",

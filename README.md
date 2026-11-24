@@ -17,6 +17,8 @@ Your MakerWorld stats live on a small ESP32 "Cheap Yellow Display", with Telegra
 - **Exact totals**: Downloads, Prints, Boosts and Likes are the same numbers shown on your MakerWorld profile (the site rounds them, e.g. 19.2k; the display shows the exact value, e.g. 19.170).
 - **New high-contrast interface**: bold fonts, big numbers, one color per stat, readable from across the room.
 - **Notification queue**: several events at once are shown one after the other, none is lost.
+- **Your choice of tiles**: from 1 to 8 (Downloads, Prints, Boosts, Points, Followers, Likes, Collections, Models), the layout adapts by itself.
+- **New follower** notifications.
 - **Model photo in the notification**: the cover of the downloaded, printed or boosted model appears next to its name.
 - **Telegram** straight from the display, with the model cover photo.
 - **Home Assistant (MQTT)**: sensors appear automatically, plus an event entity for your automations.
@@ -66,11 +68,16 @@ Open `http://<CYD IP>/config` in a browser on the same network:
 - **Check every**: 10-240 minutes (default 15)
 - **Sound**: turn the buzzer on or off (startup and notification beeps)
 - **Rotate screen 180°**: tick it if the screen is upside down in the case
+- **Display tiles**: choose which numbers to show and in which order (see below)
 - Press **Save**: the first check only saves the starting values, notifications start from the next change
 
 Useful buttons on the same page: **Check now**, **Play test sound**, **Send Telegram test**, **Simulate 3 notifications**.
 
 > ℹ️ Without logging in, the fourth tile shows your **Likes**: MakerWorld shows the **Points** only to the logged-in owner. To see them, use the optional login below.
+
+### 🧩 Display tiles
+In `http://<CYD IP>/config`, **Display tiles** lets you pick up to 8 numbers and their position: Downloads, Prints, Boosts, Points, Followers, Likes, Collections, Models (choose *hidden* to remove one).
+The layout adapts by itself: 1-3 tiles in one column with big numbers, 4 tiles as before, 5-6 and 7-8 smaller. By default you get the classic 4 tiles. Points need the MakerWorld login below.
 
 ### 🔑 Points (optional MakerWorld login)
 At the bottom of `http://<CYD IP>/config`, in **MakerWorld login**:
@@ -98,8 +105,9 @@ With MQTT discovery these entities appear by themselves under the device **Maker
 |---|---|
 | Downloads, Prints, Boosts | profile totals |
 | Likes | total likes (standalone mode) |
+| Followers | number of followers (standalone mode) |
 | Points | points balance (with the MakerWorld login, or with the v1 extension) |
-| Activity | event entity: `download`, `print`, `boost`, `points` with model name and amount |
+| Activity | event entity: `download`, `print`, `boost`, `follower`, `points` with model name and amount |
 
 Topics: `makerworld/<id>/state` (JSON, retained), `makerworld/<id>/event`, `makerworld/<id>/status` (`online`/`offline`).
 

@@ -18,20 +18,23 @@ const int COVER_X = 168, COVER_Y = 54, COVER_W = 140, COVER_H = 105;
 #define UI_MAGENTA 0xF81F
 #define UI_ORANGE  0xFD20
 #define UI_RED     0xF800
+#define UI_BLUE    0x547F   // azzurro (#5088FF)
+#define UI_PURPLE  0xAB7F   // viola (#AA6EFF)
 
 #define UI_FONT_S  &FreeSansBold9pt7b
 #define UI_FONT_M  &FreeSansBold12pt7b
 #define UI_FONT_L  &FreeSansBold18pt7b
 #define UI_FONT_XL &FreeSansBold24pt7b
 
-// Riquadri della schermata principale (2 x 2)
-const int UI_TILE_W = 151;
-const int UI_TILE_H = 82;
-const int UI_TILE_X[2] = {6, 163};
-const int UI_TILE_Y[2] = {46, 134};
+// Riquadri della schermata principale: da 1 a 8, scelti in /config.
+// La disposizione si adatta al numero: 1-3 in colonna, 4 = 2x2,
+// 5-6 = 2x3, 7-8 = 2x4 (piu' piccoli).
+enum { ST_DOWNLOADS, ST_PRINTS, ST_BOOSTS, ST_POINTS, ST_FOLLOWERS, ST_LIKES, ST_COLLECTIONS, ST_MODELS, ST_COUNT };
+const int UI_AREA_TOP = 46, UI_AREA_BOTTOM = 216, UI_GAP = 6;
 
 bool uiFramesDrawn = false;
-String uiLastValue[4];
+String uiLastValue[ST_COUNT];
+String uiLastLayout;
 String uiLastHeader;
 String uiLastFooter;
 
@@ -89,50 +92,161 @@ void uiIconStar(int x, int y, uint16_t c) {
   tft.fillCircle(cx, cy, 4, c);
 }
 
+void uiIconPerson(int x, int y, uint16_t c) {
+  tft.fillCircle(x + 8, y + 4, 4, c);
+  tft.fillRoundRect(x + 1, y + 10, 15, 7, 3, c);
+}
+
+void uiIconBookmark(int x, int y, uint16_t c) {
+  tft.fillRect(x + 3, y, 11, 17, c);
+  tft.fillTriangle(x + 4, y + 17, x + 12, y + 17, x + 8, y + 11, UI_TILE);
+}
+
+void uiIconBox(int x, int y, uint16_t c) {
+  tft.drawRect(x + 1, y + 3, 15, 14, c);
+  tft.drawRect(x + 2, y + 4, 13, 12, c);
+  tft.fillTriangle(x + 1, y + 3, x + 16, y + 3, x + 8, y - 1, c);
+}
+
 void uiIconFor(const String &type, int x, int y, uint16_t c) {
   if (type == "download") uiIconDownload(x, y, c);
   else if (type == "print") uiIconPrint(x, y, c);
   else if (type == "boost") uiIconBoost(x, y, c);
   else if (type == "like") uiIconHeart(x, y, c);
+  else if (type == "follower") uiIconPerson(x, y, c);
+  else if (type == "collection") uiIconBookmark(x, y, c);
+  else if (type == "model") uiIconBox(x, y, c);
   else uiIconStar(x, y, c);
 }
 
 // --------------------------------------------
 // Schermata principale
 // --------------------------------------------
-void uiTileInfo(int i, const char *&label, const char *&type, uint16_t &color) {
-  switch (i) {
-    case 0: label = "Downloads"; type = "download"; color = UI_GREEN; break;
-    case 1: label = "Prints";    type = "print";    color = UI_CYAN; break;
-    case 2: label = "Boosts";    type = "boost";    color = UI_YELLOW; break;
-    default:
-      if (!uiFourthIsPoints()) { label = "Likes"; type = "like"; color = UI_MAGENTA; }
-      else { label = "Points"; type = "points"; color = UI_ORANGE; }
+const char *UI_STAT_NAMES[ST_COUNT] = {"Downloads", "Prints", "Boosts", "Points",
+                                       "Followers", "Likes", "Collections", "Models"};
+
+// Elenco dei riquadri da mostrare, nell'ordine scelto
+int uiActiveTiles(uint8_t *out) {
+  int n = 0;
+  if (uiTilesCfg.length() > 0) {
+    int start = 0;
+    while (start < (int)uiTilesCfg.length() && n < ST_COUNT) {
+      int comma = uiTilesCfg.indexOf(',', start);
+      if (comma < 0) comma = uiTilesCfg.length();
+      int id = uiTilesCfg.substring(start, comma).toInt();
+      if (id >= 0 && id < ST_COUNT) out[n++] = id;
+      start = comma + 1;
+    }
+  }
+  if (n == 0) {   // di serie: come prima (Likes, oppure Points con l'accesso)
+    out[0] = ST_DOWNLOADS; out[1] = ST_PRINTS; out[2] = ST_BOOSTS;
+    out[3] = uiFourthIsPoints() ? ST_POINTS : ST_LIKES;
+    n = 4;
+  }
+  return n;
+}
+
+void uiTileInfo(int id, const char *&label, const char *&type, uint16_t &color) {
+  label = UI_STAT_NAMES[id];
+  switch (id) {
+    case ST_DOWNLOADS:   type = "download";   color = UI_GREEN; break;
+    case ST_PRINTS:      type = "print";      color = UI_CYAN; break;
+    case ST_BOOSTS:      type = "boost";      color = UI_YELLOW; break;
+    case ST_POINTS:      type = "points";     color = UI_ORANGE; break;
+    case ST_FOLLOWERS:   type = "follower";   color = UI_BLUE; break;
+    case ST_LIKES:       type = "like";       color = UI_MAGENTA; break;
+    case ST_COLLECTIONS: type = "collection"; color = UI_PURPLE; break;
+    default:             type = "model";      color = UI_TEXT; break;
   }
 }
 
-void uiDrawTileFrame(int i) {
-  const char *label, *type;
-  uint16_t color;
-  uiTileInfo(i, label, type, color);
-  int x = UI_TILE_X[i % 2], y = UI_TILE_Y[i / 2];
-  tft.fillRoundRect(x, y, UI_TILE_W, UI_TILE_H, 8, UI_TILE);
-  tft.fillRoundRect(x, y, 5, UI_TILE_H, 2, color);
-  uiIconFor(type, x + 14, y + 10, color);
-  tft.setFreeFont(UI_FONT_S);
-  tft.setTextColor(color);
-  tft.setTextDatum(ML_DATUM);
-  tft.drawString(label, x + 38, y + 19);
+String uiTileValue(int id) {
+  switch (id) {
+    case ST_DOWNLOADS:   return formatThousands(stats.totalDownloads);
+    case ST_PRINTS:      return formatThousands(stats.totalPrints);
+    case ST_BOOSTS:      return formatThousands(stats.totalBoosts);
+    case ST_POINTS:
+      if (saIsEnabled() && !mwLoggedIn()) return "login";
+      if (saIsEnabled() && !mwPointsKnown()) return "...";
+      return formatPoints(stats.totalPoints);
+    case ST_FOLLOWERS:   return stats.totalFollowers < 0 ? String("...") : formatThousands(stats.totalFollowers);
+    case ST_LIKES:       return formatThousands(stats.totalLikes);
+    case ST_COLLECTIONS: return formatThousands(stats.totalCollections);
+    default:             return formatThousands(stats.totalModels);
+  }
 }
 
-void uiDrawTileValue(int i, const String &value) {
-  int x = UI_TILE_X[i % 2], y = UI_TILE_Y[i / 2];
-  tft.fillRect(x + 8, y + 34, UI_TILE_W - 12, 44, UI_TILE);
-  tft.setFreeFont(UI_FONT_L);
-  if (tft.textWidth(value) > UI_TILE_W - 24) tft.setFreeFont(UI_FONT_M);
-  tft.setTextColor(UI_TEXT);
-  tft.setTextDatum(ML_DATUM);
-  tft.drawString(value, x + 14, y + 57);
+// Posizione e misure del riquadro numero `pos` su `n`
+void uiTileBox(int pos, int n, int &x, int &y, int &w, int &h) {
+  int cols = n <= 3 ? 1 : 2;
+  int rows = (n + cols - 1) / cols;
+  w = (320 - 2 * UI_GAP - (cols - 1) * UI_GAP) / cols;
+  h = (UI_AREA_BOTTOM - UI_AREA_TOP - (rows - 1) * UI_GAP) / rows;
+  x = UI_GAP + (pos % cols) * (w + UI_GAP);
+  y = UI_AREA_TOP + (pos / cols) * (h + UI_GAP);
+}
+
+// 3 stili: grande (nome sopra, numero grande), medio, piccolo (nome e numero su due righe strette)
+void uiDrawTileFrame(int pos, int n, int id) {
+  const char *label, *type;
+  uint16_t color;
+  uiTileInfo(id, label, type, color);
+  int x, y, w, h;
+  uiTileBox(pos, n, x, y, w, h);
+  tft.fillRoundRect(x, y, w, h, 8, UI_TILE);
+  tft.fillRoundRect(x, y, 5, h, 2, color);
+  if (w > 200 && h < 70) {   // riga larga: nome a sinistra, numero grande a destra
+    uiIconFor(type, x + 14, y + h / 2 - 9, color);
+    tft.setFreeFont(UI_FONT_M);
+    tft.setTextColor(color);
+    tft.setTextDatum(ML_DATUM);
+    tft.drawString(label, x + 40, y + h / 2);
+  } else if (h >= 48) {
+    int iy = h >= 70 ? 10 : 6;
+    uiIconFor(type, x + 14, y + iy, color);
+    tft.setFreeFont(UI_FONT_S);
+    tft.setTextColor(color);
+    tft.setTextDatum(ML_DATUM);
+    tft.drawString(label, x + 38, y + iy + 9);
+  } else {
+    tft.setTextFont(2);
+    tft.setTextColor(color);
+    tft.setTextDatum(TL_DATUM);
+    tft.drawString(label, x + 12, y + 3);
+  }
+}
+
+void uiDrawTileValue(int pos, int n, const String &value) {
+  int x, y, w, h;
+  uiTileBox(pos, n, x, y, w, h);
+  if (w > 200 && h < 70) {
+    tft.fillRect(x + 172, y + 4, w - 178, h - 8, UI_TILE);   // il nome finisce prima (Collections ~ x+165)
+    tft.setFreeFont(UI_FONT_L);
+    if (tft.textWidth(value) > w - 190) tft.setFreeFont(UI_FONT_M);
+    tft.setTextColor(UI_TEXT);
+    tft.setTextDatum(MR_DATUM);
+    tft.drawString(value, x + w - 14, y + h / 2);
+  } else if (h >= 48) {
+    int top = h >= 70 ? 34 : 27;
+    int ah = h - top - 3;
+    tft.fillRect(x + 8, y + top, w - 12, ah, UI_TILE);
+    // il carattere piu' grande che sta nel riquadro
+    if (ah >= 44 && w > 200) tft.setFreeFont(UI_FONT_XL);
+    else if (ah >= 30) tft.setFreeFont(UI_FONT_L);
+    else tft.setFreeFont(UI_FONT_M);
+    if (tft.textWidth(value) > w - 24) tft.setFreeFont(UI_FONT_M);
+    if (tft.textWidth(value) > w - 24) tft.setFreeFont(UI_FONT_S);
+    tft.setTextColor(UI_TEXT);
+    tft.setTextDatum(ML_DATUM);
+    tft.drawString(value, x + 14, y + top + ah / 2);
+  } else {
+    tft.fillRect(x + 8, y + 19, w - 12, h - 20, UI_TILE);
+    tft.setFreeFont(UI_FONT_M);
+    if (tft.textWidth(value) > w - 20) tft.setFreeFont(UI_FONT_S);
+    tft.setTextColor(UI_TEXT);
+    tft.setTextDatum(MR_DATUM);
+    tft.drawString(value, x + w - 8, y + h - 11);
+  }
 }
 
 void uiDrawHeader() {
@@ -205,38 +319,35 @@ void showMainScreen() {
   uiFramesDrawn = false;
   uiLastHeader = "";
   uiLastFooter = "";
-  for (int i = 0; i < 4; i++) uiLastValue[i] = "";
   updateStatsDisplay();
 }
 
 void updateStatsDisplay() {
   if (currentNotif.active) return;
 
-  // Riquadro 4 cambiato (Likes <-> Points): si ridisegna la cornice
-  static int lastKind = -1;
-  if ((int)uiFourthIsPoints() != lastKind) {
-    lastKind = uiFourthIsPoints();
+  uint8_t tiles[ST_COUNT];
+  int n = uiActiveTiles(tiles);
+
+  // Riquadri cambiati (scelta in /config, Likes <-> Points): si ridisegna tutto
+  String layout = "";
+  for (int i = 0; i < n; i++) layout += String(tiles[i]) + ",";
+  if (layout != uiLastLayout) {
+    uiLastLayout = layout;
+    if (uiFramesDrawn) tft.fillRect(0, UI_AREA_TOP - 2, 320, UI_AREA_BOTTOM - UI_AREA_TOP + 4, UI_BG);
     uiFramesDrawn = false;
-    uiLastValue[3] = "";
   }
 
   if (!uiFramesDrawn) {
-    for (int i = 0; i < 4; i++) uiDrawTileFrame(i);
-    for (int i = 0; i < 4; i++) uiLastValue[i] = "";   // la cornice cancella anche i numeri
+    for (int i = 0; i < n; i++) uiDrawTileFrame(i, n, tiles[i]);
+    for (int i = 0; i < ST_COUNT; i++) uiLastValue[i] = "";   // la cornice cancella anche i numeri
     uiFramesDrawn = true;
   }
 
-  String values[4] = {
-    formatThousands(stats.totalDownloads),
-    formatThousands(stats.totalPrints),
-    formatThousands(stats.totalBoosts),
-    !uiFourthIsPoints() ? formatThousands(stats.totalLikes)
-      : (saIsEnabled() && !mwPointsKnown()) ? String("...") : formatPoints(stats.totalPoints)
-  };
-  for (int i = 0; i < 4; i++) {
-    if (values[i] != uiLastValue[i]) {
-      uiDrawTileValue(i, values[i]);
-      uiLastValue[i] = values[i];
+  for (int i = 0; i < n; i++) {
+    String v = uiTileValue(tiles[i]);
+    if (v != uiLastValue[i]) {
+      uiDrawTileValue(i, n, v);
+      uiLastValue[i] = v;
     }
   }
   uiDrawHeader();
@@ -378,6 +489,7 @@ void showNotification() {
   const char *title = "NEW DOWNLOAD";
   if (type == "print") { color = UI_CYAN; title = "NEW PRINT"; }
   else if (type == "boost") { color = UI_YELLOW; title = "NEW BOOST"; }
+  else if (type == "follower") { color = UI_BLUE; title = currentNotif.value > 1 ? "NEW FOLLOWERS" : "NEW FOLLOWER"; }
   uiNotifHeader(title, type, color);
 
   // Nome del modello: bianco, grassetto. Con la foto sta nella colonna di
@@ -427,4 +539,48 @@ String formatPoints(float p) {
   long whole = (long)(p + (p >= 0 ? 0.005f : -0.005f));
   if (fabsf(p - whole) < 0.005f) return formatThousands(whole);
   return String(p, 2);
+}
+
+// --------------------------------------------
+// Riquadri della schermata principale (scelta in /config)
+// --------------------------------------------
+String saTilesSection() {
+  uint8_t tiles[ST_COUNT];
+  int n = uiActiveTiles(tiles);
+  String h = F("<label>Display tiles</label><small>Choose what to show and in which position "
+               "(1-3 tiles: big, 4: like now, 5-6 and 7-8: smaller). Points need the MakerWorld login below.</small>"
+               "<table style='width:100%;margin-top:6px'>");
+  for (int id = 0; id < ST_COUNT; id++) {
+    int pos = 0;
+    for (int i = 0; i < n; i++) if (tiles[i] == id) pos = i + 1;
+    h += "<tr><td>" + String(UI_STAT_NAMES[id]) + "</td><td style='text-align:right'><select name='t" + String(id) +
+         "' style='padding:6px;border-radius:6px;font-size:1em'>";
+    for (int p = 0; p <= ST_COUNT; p++) {
+      h += "<option value='" + String(p) + "'" + (p == pos ? " selected" : "") + ">" + (p == 0 ? String("hidden") : String(p)) + "</option>";
+    }
+    h += "</select></td></tr>";
+  }
+  h += F("</table>");
+  return h;
+}
+
+void saReadTilesForm() {
+  if (!server.hasArg("t0")) return;   // vecchio modulo senza la scelta: non si tocca
+  String out = "";
+  for (int p = 1; p <= ST_COUNT; p++) {          // per posizione...
+    for (int id = 0; id < ST_COUNT; id++) {      // ...e a parita' di posizione, nell'ordine dell'elenco
+      if (server.arg("t" + String(id)).toInt() == p) out += String(id) + ",";
+    }
+  }
+  if (out.endsWith(",")) out.remove(out.length() - 1);
+  // Uguale alla scelta di serie: si lascia "di serie" (cosi' Likes/Points cambia da solo con l'accesso)
+  String saved = uiTilesCfg;
+  uiTilesCfg = "";
+  uint8_t def[ST_COUNT];
+  int dn = uiActiveTiles(def);
+  String defStr = "";
+  for (int i = 0; i < dn; i++) defStr += (i ? "," : "") + String(def[i]);
+  uiTilesCfg = (out.length() == 0 || out == defStr) ? "" : out;
+  if (out.length() == 0) Serial.println("Tiles: none chosen, back to default");
+  (void)saved;
 }

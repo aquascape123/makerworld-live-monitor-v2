@@ -41,6 +41,9 @@ struct Stats {
   int totalBoosts = 0;
   float totalPoints = 0.0;  // CAMBIATO DA int A float
   long totalLikes = 0;       // usato dalla modalita' autonoma (i punti li' non ci sono)
+  long totalFollowers = -1;  // -1 = non ancora letto (niente notifica al primo controllo)
+  long totalCollections = 0;
+  long totalModels = 0;
   char accountName[32] = "";  // AGGIUNTO: Nome account (max 31 caratteri)
   unsigned long lastNotification = 0;
   bool initialized = false;
@@ -145,6 +148,9 @@ void saveStats() {
   prefs.putInt("boosts", stats.totalBoosts);
   prefs.putFloat("points", stats.totalPoints);  // CAMBIATO putInt in putFloat
   prefs.putLong("likes", stats.totalLikes);
+  prefs.putLong("followers", stats.totalFollowers);
+  prefs.putLong("collections", stats.totalCollections);
+  prefs.putLong("models", stats.totalModels);
   prefs.putString("accountName", String(stats.accountName));  // AGGIUNTO: Salva nome account
   prefs.putBool("initialized", stats.initialized);
   prefs.end();
@@ -159,6 +165,9 @@ void loadStats() {
   stats.totalBoosts = prefs.getInt("boosts", 0);
   stats.totalPoints = prefs.getFloat("points", 0.0);  // CAMBIATO getInt in getFloat
   stats.totalLikes = prefs.getLong("likes", 0);
+  stats.totalFollowers = prefs.getLong("followers", -1);
+  stats.totalCollections = prefs.getLong("collections", 0);
+  stats.totalModels = prefs.getLong("models", 0);
   
   // AGGIUNTO: Carica nome account
   String accountNameStr = prefs.getString("accountName", "");

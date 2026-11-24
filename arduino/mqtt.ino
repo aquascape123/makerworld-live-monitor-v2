@@ -108,6 +108,9 @@ void mqttPublishDiscovery() {
   mqttDiscoverSensor("downloads", "Downloads", "mdi:download");
   mqttDiscoverSensor("prints", "Prints", "mdi:printer-3d");
   mqttDiscoverSensor("boosts", "Boosts", "mdi:rocket-launch");
+  String followersTopic = mq.prefix + "/sensor/" + mqttId + "/followers/config";
+  if (saIsEnabled()) mqttDiscoverSensor("followers", "Followers", "mdi:account-multiple");
+  else mqttClient.publish(followersTopic.c_str(), "", true);
 
   // Like solo in modalita' autonoma, punti solo con l'estensione:
   // il sensore che non ha dati viene tolto da Home Assistant (config vuota).
@@ -131,6 +134,7 @@ void mqttPublishDiscovery() {
   types.add("download");
   types.add("print");
   types.add("boost");
+  types.add("follower");
   types.add("points");
   types.add("daily_summary");
   mqttAddDevice(doc);
@@ -142,6 +146,7 @@ void mqttPublishState() {
   doc["downloads"] = stats.totalDownloads;
   doc["prints"] = stats.totalPrints;
   doc["boosts"] = stats.totalBoosts;
+  if (saIsEnabled() && stats.totalFollowers >= 0) doc["followers"] = stats.totalFollowers;
   if (saIsEnabled()) doc["likes"] = stats.totalLikes;
   if (!saIsEnabled() || mwPointsKnown()) doc["points"] = serialized(String(stats.totalPoints, 2));
   doc["account"] = stats.accountName;

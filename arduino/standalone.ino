@@ -36,6 +36,7 @@ struct MwAuth {
 } mwa;
 String mwBearer = "";    // se non vuoto, saGetJson manda "Authorization: Bearer ..."
 String mwStatus = "";
+String uiTilesCfg = "";   // riquadri scelti in /config, es. "0,1,2,4" (vuota = di serie, vedi ui.ino)
 
 ModelCount saBaseline[SA_MAX_MODELS];
 int saBaselineCount = 0;
@@ -63,6 +64,7 @@ void saLoadConfig() {
   sa.intervalMin = p.getUShort("interval", 15);
   soundOn = p.getBool("sound", true);
   screenFlip = p.getBool("flip", false);
+  uiTilesCfg = p.getString("tiles", "");
   saBaselineCount = p.getInt("baseCount", 0);
   if (saBaselineCount > 0 && saBaselineCount <= SA_MAX_MODELS) {
     p.getBytes("baseline", saBaseline, sizeof(ModelCount) * saBaselineCount);
@@ -92,6 +94,7 @@ void saSaveConfig() {
   p.putUShort("interval", sa.intervalMin);
   p.putBool("sound", soundOn);
   p.putBool("flip", screenFlip);
+  p.putString("tiles", uiTilesCfg);
   p.end();
 }
 
@@ -200,6 +203,9 @@ bool saFetchProfileTotals(String &error) {
   filter["name"] = true;
   filter["likeCount"] = true;
   filter["boostGained"] = true;
+  filter["fanCount"] = true;
+  filter["collectionCount"] = true;
+  filter["MWCount"]["designCount"] = true;
   filter["MWCount"]["myDesignDownloadCount"] = true;
   filter["MWCount"]["myDesignPrintCount"] = true;
   JsonDocument doc;
@@ -213,6 +219,9 @@ bool saFetchProfileTotals(String &error) {
   stats.totalPrints = doc["MWCount"]["myDesignPrintCount"] | 0;
   stats.totalBoosts = doc["boostGained"] | 0;
   stats.totalLikes = doc["likeCount"] | 0;
+  if (!doc["fanCount"].isNull()) stats.totalFollowers = doc["fanCount"] | 0;
+  stats.totalCollections = doc["collectionCount"] | 0;
+  stats.totalModels = doc["MWCount"]["designCount"] | 0;
   String name = doc["name"] | "";
   if (name.length() > 0) {
     strncpy(stats.accountName, name.c_str(), sizeof(stats.accountName) - 1);
@@ -412,6 +421,8 @@ bool saCheckNow() {
 
   bool firstRun = saBaselineCount == 0;
 
+  long oldFollowers = stats.totalFollowers;
+
   // Totali: quelli del profilo (uguali al sito). Se non si riesce a
   // leggerli si usa la somma dei modelli pubblicati come riserva.
   String profileError;
@@ -429,6 +440,7 @@ bool saCheckNow() {
     stats.totalPrints = prints;
     stats.totalBoosts = boosts;
     stats.totalLikes = likes;
+    stats.totalModels = saCurrentCount;
     if (creatorName.length() > 0) {
       strncpy(stats.accountName, creatorName.c_str(), sizeof(stats.accountName) - 1);
       stats.accountName[sizeof(stats.accountName) - 1] = '\0';
@@ -481,6 +493,18 @@ bool saCheckNow() {
     for (int i = 0; i < saPendingCount; i++) {
       saTelegramSend(saTelegramText(saPending[i]), saPending[i].coverUrl);
     }
+  }
+  if (oldFollowers >= 0 && stats.totalFollowers > oldFollowers) {
+    long more = stats.totalFollowers - oldFollowers;
+    Notification n;
+    n.type = "follower";
+    n.modelName = more > 1 ? "You have " + String(more) + " new followers!" : String("You have a new follower!");
+    n.value = more;
+    n.total = stats.totalFollowers;
+    n.points = 0;
+    enqueueNotification(n);
+    saTelegramSend("👤 New follower" + String(more > 1 ? "s: +" + String(more) : String("!")) +
+                   "\n\nTotal: " + String(stats.totalFollowers), "");
   }
   if (pointsEvent) {
     Notification n;
@@ -583,7 +607,9 @@ void saSendConfigPage(const String &message) {
   html += F("> Sound (buzzer on GPIO 22)</label><small>Beep at startup and on every notification.</small>"
             "<label><input type='checkbox' name='flip' value='1'");
   if (screenFlip) html += " checked";
-  html += F("> Rotate screen 180&deg;</label><small>Tick it if the screen is upside down in the case.</small>"
+  html += F("> Rotate screen 180&deg;</label><small>Tick it if the screen is upside down in the case.</small>");
+  html += saTilesSection();
+  html += F(""
             "<label>Telegram bot token (optional)</label><input type='text' name='tgToken' autocomplete='off' placeholder='");
   html += sa.tgToken.length() ? F("saved - leave empty to keep it") : F("123456789:ABC...");
   html += F("'><small>Write <b>-</b> to remove it.</small><label>Telegram chat ID</label><input type='text' name='tgChat' value='");
@@ -624,6 +650,7 @@ void handleConfigPost() {
   soundOn = server.hasArg("sound");
   bool wasFlipped = screenFlip;
   screenFlip = server.hasArg("flip");
+  saReadTilesForm();
 
   String token = server.arg("tgToken");
   token.trim();
@@ -644,10 +671,8 @@ void handleConfigPost() {
   }
 
   saSaveConfig();
-  if (screenFlip != wasFlipped) {   // si gira subito, senza riavviare
-    tft.setRotation(screenRotation());
-    if (!currentNotif.active) showMainScreen();
-  }
+  if (screenFlip != wasFlipped) tft.setRotation(screenRotation());   // si gira subito, senza riavviare
+  if (!currentNotif.active) showMainScreen();   // anche i riquadri scelti si vedono subito
   if (sa.enabled != wasEnabled) mqttReconnectNow();  // Home Assistant: like o punti cambiano
   if (message.length() == 0) {
     message = "Saved.";
@@ -694,10 +719,11 @@ void handleSimulateChanges() {
   if (pr >= 0) saBaseline[pr].prints -= 1;
   if (b >= 0) saBaseline[b].boosts -= 1;
   if (mwPointsKnown()) stats.totalPoints -= 5;   // con l'accesso: anche una notifica "+5 punti"
+  if (stats.totalFollowers > 0) stats.totalFollowers -= 1;   // e un "nuovo follower"
   saSaveBaseline();
   saCheckRequested = true;
-  saSendConfigPage(mwPointsKnown() ? "Test started: in a few seconds you should see 4 notifications (download, print, boost, points)."
-                                   : "Test started: in a few seconds you should see 3 notifications (download, print, boost).");
+  saSendConfigPage(mwPointsKnown() ? "Test started: in a few seconds you should see 5 notifications (download, print, boost, follower, points)."
+                                   : "Test started: in a few seconds you should see 4 notifications (download, print, boost, follower).");
 }
 
 void saRegisterRoutes() {
