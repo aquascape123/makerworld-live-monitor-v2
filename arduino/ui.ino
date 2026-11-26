@@ -20,6 +20,7 @@ const int COVER_X = 168, COVER_Y = 54, COVER_W = 140, COVER_H = 105;
 #define UI_RED     0xF800
 #define UI_BLUE    0x547F   // azzurro (#5088FF)
 #define UI_PURPLE  0xAB7F   // viola (#AA6EFF)
+#define UI_PINK    0xFB2C   // rosa (#FF6464)
 
 #define UI_FONT_S  &FreeSansBold9pt7b
 #define UI_FONT_M  &FreeSansBold12pt7b
@@ -108,6 +109,11 @@ void uiIconBox(int x, int y, uint16_t c) {
   tft.fillTriangle(x + 1, y + 3, x + 16, y + 3, x + 8, y - 1, c);
 }
 
+void uiIconComment(int x, int y, uint16_t c) {
+  tft.fillRoundRect(x, y + 1, 17, 12, 3, c);
+  tft.fillTriangle(x + 3, y + 12, x + 9, y + 12, x + 3, y + 17, c);
+}
+
 void uiIconFor(const String &type, int x, int y, uint16_t c) {
   if (type == "download") uiIconDownload(x, y, c);
   else if (type == "print") uiIconPrint(x, y, c);
@@ -116,6 +122,7 @@ void uiIconFor(const String &type, int x, int y, uint16_t c) {
   else if (type == "follower") uiIconPerson(x, y, c);
   else if (type == "collection") uiIconBookmark(x, y, c);
   else if (type == "model") uiIconBox(x, y, c);
+  else if (type == "comment") uiIconComment(x, y, c);
   else uiIconStar(x, y, c);
 }
 
@@ -481,6 +488,26 @@ void showNotification() {
       tft.drawString(vals[i], 306, y);
     }
     uiBlinkBorder(UI_CYAN);
+    blinkRed(2, 100);
+    return;
+  }
+
+  if (type == "comment") {
+    // Chi ha scritto, l'inizio del testo e la copertina; il modello in basso
+    uiNotifHeader("NEW COMMENT", "comment", UI_PINK);
+    bool withCover = currentNotif.coverUrl.length() > 0;
+    int colW = withCover ? COVER_X - 18 : 296;
+    tft.setFreeFont(UI_FONT_M);
+    tft.setTextColor(UI_PINK);
+    uiDrawWrapped(currentNotif.author.length() ? currentNotif.author : String("Someone"), 12, 54, colW, 24, 1);
+    tft.setFreeFont(UI_FONT_S);
+    tft.setTextColor(UI_TEXT);
+    uiDrawWrapped(currentNotif.text, 12, 84, colW, 19, withCover ? 4 : 5);
+    tft.setTextFont(2);
+    tft.setTextColor(UI_MUTED);
+    uiDrawWrapped("on " + currentNotif.modelName, 12, 182, 296, 18, 2);
+    if (withCover) coverDraw(currentNotif.coverUrl);
+    uiBlinkBorder(UI_PINK);
     blinkRed(2, 100);
     return;
   }

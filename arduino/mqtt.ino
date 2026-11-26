@@ -135,6 +135,7 @@ void mqttPublishDiscovery() {
   types.add("print");
   types.add("boost");
   types.add("follower");
+  types.add("comment");
   types.add("points");
   types.add("daily_summary");
   mqttAddDevice(doc);
@@ -156,13 +157,15 @@ void mqttPublishState() {
 // Chiamata da enqueueNotification(): una novita' da mostrare
 void mqttPublishEvent(const Notification &n) {
   if (!mq.enabled || !mqttClient.connected()) return;
-  if (n.type != "download" && n.type != "print" && n.type != "boost" &&
-      n.type != "points" && n.type != "daily_summary") return;
+  if (n.type != "download" && n.type != "print" && n.type != "boost" && n.type != "follower" &&
+      n.type != "comment" && n.type != "points" && n.type != "daily_summary") return;
   JsonDocument doc;
   doc["event_type"] = n.type;
   doc["model"] = n.modelName;
   doc["value"] = n.value;
   doc["total"] = n.total;
+  if (n.author.length()) doc["author"] = n.author;
+  if (n.text.length()) doc["text"] = n.text.substring(0, 300);
   mqttPublishJson(mqttBase + "/event", doc, false);
 }
 

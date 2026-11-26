@@ -8,6 +8,7 @@ struct ModelCount {
   int32_t downloads;
   int32_t prints;
   int32_t boosts;
+  int32_t comments;   // commenti + risposte (MakerWorld conta anche le tue)
 };
 
 struct PendingEvent {
@@ -16,4 +17,7 @@ struct PendingEvent {
   String coverUrl;
   int32_t value;
   int32_t total;
+  uint32_t designId = 0;   // per leggere il commento nuovo
+  String author;           // commento: chi l'ha scritto
+  String text;             // commento: il testo
 };

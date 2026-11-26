@@ -1,6 +1,6 @@
 {
   "name": "MakerWorld Monitor - CYD 2.4\"",
-  "version": "3.4.0-cyd24",
+  "version": "3.5.0-cyd24",
   "builds": [
     {
       "chipFamily": "ESP32",

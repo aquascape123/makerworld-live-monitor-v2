@@ -56,6 +56,8 @@ struct Notification {
   float total;    // CAMBIATO DA int A float
   float points;   // CAMBIATO DA int A float
   String coverUrl;  // foto del modello (solo modalita' autonoma)
+  String author;    // commento: chi l'ha scritto
+  String text;      // commento: il testo
   unsigned long timestamp;
   bool active = false;
 } currentNotif;
@@ -510,6 +512,8 @@ void enqueueNotification(const Notification &original) {
   mqttPublishEvent(original);  // Home Assistant: evento per le automazioni
   Notification n = original;
   n.modelName = toDisplayText(original.modelName);
+  n.author = toDisplayText(original.author);
+  n.text = toDisplayText(original.text);
   if (notifQueueCount == NOTIF_QUEUE_SIZE) {
     // Coda piena: si scarta la piu' vecchia (i totali sono comunque aggiornati)
     notifQueueHead = (notifQueueHead + 1) % NOTIF_QUEUE_SIZE;

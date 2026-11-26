@@ -19,6 +19,7 @@ Your MakerWorld stats live on a small ESP32 "Cheap Yellow Display", with Telegra
 - **Notification queue**: several events at once are shown one after the other, none is lost.
 - **Your choice of tiles**: from 1 to 8 (Downloads, Prints, Boosts, Points, Followers, Likes, Collections, Models), the layout adapts by itself.
 - **New follower** notifications.
+- **New comment** notifications: who wrote it, the beginning of the text and the model cover (full text on Telegram). Your own replies are ignored.
 - **Model photo in the notification**: the cover of the downloaded, printed or boosted model appears next to its name.
 - **Telegram** straight from the display, with the model cover photo.
 - **Home Assistant (MQTT)**: sensors appear automatically, plus an event entity for your automations.
@@ -107,7 +108,7 @@ With MQTT discovery these entities appear by themselves under the device **Maker
 | Likes | total likes (standalone mode) |
 | Followers | number of followers (standalone mode) |
 | Points | points balance (with the MakerWorld login, or with the v1 extension) |
-| Activity | event entity: `download`, `print`, `boost`, `follower`, `points` with model name and amount |
+| Activity | event entity: `download`, `print`, `boost`, `comment`, `follower`, `points` with model name and amount (comments also with `author` and `text`) |
 
 Topics: `makerworld/<id>/state` (JSON, retained), `makerworld/<id>/event`, `makerworld/<id>/status` (`online`/`offline`).
 

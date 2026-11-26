@@ -37,6 +37,8 @@ struct MwAuth {
 String mwBearer = "";    // se non vuoto, saGetJson manda "Authorization: Bearer ..."
 String mwStatus = "";
 String uiTilesCfg = "";   // riquadri scelti in /config, es. "0,1,2,4" (vuota = di serie, vedi ui.ino)
+String saCmtSeen = "";     // ora dell'ultimo commento notificato (es. "2026-11-23T11:11:18Z")
+bool saSimComment = false; // /simulate: mostra l'ultimo commento anche se vecchio
 
 ModelCount saBaseline[SA_MAX_MODELS];
 int saBaselineCount = 0;
@@ -65,9 +67,12 @@ void saLoadConfig() {
   soundOn = p.getBool("sound", true);
   screenFlip = p.getBool("flip", false);
   uiTilesCfg = p.getString("tiles", "");
-  saBaselineCount = p.getInt("baseCount", 0);
+  // "base2": dalla 3.5 ogni modello ha anche i commenti (il vecchio formato si ignora:
+  // il primo controllo dopo l'aggiornamento riparte da zero, senza notifiche)
+  saBaselineCount = p.getInt("base2Count", 0);
+  saCmtSeen = p.getString("cmtSeen", "");
   if (saBaselineCount > 0 && saBaselineCount <= SA_MAX_MODELS) {
-    p.getBytes("baseline", saBaseline, sizeof(ModelCount) * saBaselineCount);
+    p.getBytes("base2", saBaseline, sizeof(ModelCount) * saBaselineCount);
   } else {
     saBaselineCount = 0;
   }
@@ -101,9 +106,9 @@ void saSaveConfig() {
 void saSaveBaseline() {
   Preferences p;
   p.begin("standalone", false);
-  p.putInt("baseCount", saBaselineCount);
+  p.putInt("base2Count", saBaselineCount);
   if (saBaselineCount > 0) {
-    p.putBytes("baseline", saBaseline, sizeof(ModelCount) * saBaselineCount);
+    p.putBytes("base2", saBaseline, sizeof(ModelCount) * saBaselineCount);
   }
   p.end();
 }
@@ -272,6 +277,9 @@ bool saTelegramSend(const String &text, const String &photoUrl) {
 
 String saTelegramText(const PendingEvent &e) {
   String head;
+  if (e.type == "comment") {
+    return "💬 New comment on: " + e.title + "\n\n" + e.author + ":\n" + e.text;
+  }
   if (e.type == "download") head = "📈 New downloads for: ";
   else if (e.type == "print") head = "🖨 New prints for: ";
   else head = "⚡ New boosts for: ";
@@ -299,6 +307,9 @@ void saAddPending(const char *type, const char *title, const char *cover, int32_
   e.coverUrl = cover ? cover : "";
   e.value = value;
   e.total = total;
+  e.designId = 0;
+  e.author = "";
+  e.text = "";
 }
 
 // Scarica una pagina di modelli. Ritorna il numero di modelli letti, -1 se errore.
@@ -336,6 +347,7 @@ int saFetchPage(int offset, int &total, long &likes, String &creatorName, String
   filter["hits"][0]["printCount"] = true;
   filter["hits"][0]["boostCnt"] = true;
   filter["hits"][0]["likeCount"] = true;
+  filter["hits"][0]["commentCount"] = true;
   filter["hits"][0]["designCreator"]["name"] = true;
 
   JsonDocument doc;
@@ -367,6 +379,7 @@ int saFetchPage(int offset, int &total, long &likes, String &creatorName, String
     m.downloads = h["downloadCount"] | 0;
     m.prints = h["printCount"] | 0;
     m.boosts = h["boostCnt"] | 0;
+    m.comments = h["commentCount"] | 0;
     likes += h["likeCount"] | 0;
     if (creatorName.length() == 0) creatorName = h["designCreator"]["name"] | "";
 
@@ -377,6 +390,10 @@ int saFetchPage(int offset, int &total, long &likes, String &creatorName, String
       if (m.boosts > prev->boosts) saAddPending("boost", title, cover, m.boosts - prev->boosts, m.boosts);
       if (m.downloads > prev->downloads) saAddPending("download", title, cover, m.downloads - prev->downloads, m.downloads);
       if (m.prints > prev->prints) saAddPending("print", title, cover, m.prints - prev->prints, m.prints);
+      if (m.comments > prev->comments) {
+        saAddPending("comment", title, cover, m.comments - prev->comments, m.comments);
+        if (saPendingCount > 0 && saPending[saPendingCount - 1].type == "comment") saPending[saPendingCount - 1].designId = id;
+      }
     }
   }
   return count;
@@ -479,21 +496,31 @@ bool saCheckNow() {
   Serial.print(" time: "); Serial.print(millis() - started); Serial.println(" ms");
 
   if (!firstRun) {
+    int commentReads = 0;
     for (int i = 0; i < saPendingCount; i++) {
       PendingEvent &e = saPending[i];
+      if (e.type == "comment") {
+        // si scartano le tue risposte; al massimo 5 letture per controllo
+        if (commentReads >= 5 || !saFetchComment(e)) { e.type = ""; continue; }
+        commentReads++;
+      }
       Notification n;
       n.type = e.type;
       n.modelName = e.title;
       n.value = e.value;
       n.total = e.total;
       n.coverUrl = e.coverUrl;
+      n.author = e.author;
+      n.text = e.text;
       n.points = e.type == "download" ? e.value : (e.type == "print" ? e.value * 2 : 0);
       enqueueNotification(n);
     }
     for (int i = 0; i < saPendingCount; i++) {
+      if (saPending[i].type.length() == 0) continue;   // commento scartato
       saTelegramSend(saTelegramText(saPending[i]), saPending[i].coverUrl);
     }
   }
+  saSimComment = false;
   if (oldFollowers >= 0 && stats.totalFollowers > oldFollowers) {
     long more = stats.totalFollowers - oldFollowers;
     Notification n;
@@ -531,6 +558,8 @@ void saLoop() {
   bool due = !saEverChecked ? now > 10000 : (now - saLastCheck >= interval);
   if (!due && !saCheckRequested) return;
 
+  static bool ntpStarted = false;
+  if (!ntpStarted) { configTime(0, 0, "pool.ntp.org", "time.google.com"); ntpStarted = true; }
   saCheckRequested = false;
   saEverChecked = true;
   saLastCheck = now;
@@ -720,10 +749,13 @@ void handleSimulateChanges() {
   if (b >= 0) saBaseline[b].boosts -= 1;
   if (mwPointsKnown()) stats.totalPoints -= 5;   // con l'accesso: anche una notifica "+5 punti"
   if (stats.totalFollowers > 0) stats.totalFollowers -= 1;   // e un "nuovo follower"
+  for (int i = 0; i < saBaselineCount; i++) {            // e un commento (l'ultimo, anche se vecchio)
+    if (saBaseline[i].comments >= 1) { saBaseline[i].comments -= 1; saSimComment = true; break; }
+  }
   saSaveBaseline();
   saCheckRequested = true;
-  saSendConfigPage(mwPointsKnown() ? "Test started: in a few seconds you should see 5 notifications (download, print, boost, follower, points)."
-                                   : "Test started: in a few seconds you should see 4 notifications (download, print, boost, follower).");
+  saSendConfigPage(mwPointsKnown() ? "Test started: in a few seconds you should see up to 6 notifications (download, print, boost, comment, follower, points)."
+                                   : "Test started: in a few seconds you should see up to 5 notifications (download, print, boost, comment, follower).");
 }
 
 void saRegisterRoutes() {
@@ -964,4 +996,79 @@ void handleMwLogout() {
   mwReconnectHa();
   if (!currentNotif.active) updateStatsDisplay();
   saSendConfigPage("Logged out: the login token has been deleted from the display.");
+}
+
+// --------------------------------------------
+// Commenti: chi ha scritto e cosa
+// --------------------------------------------
+// Si segnalano solo commenti/risposte piu' recenti dell'ultimo gia' notificato
+// (e degli ultimi 2 giorni), scritti da altri: le tue risposte no.
+String saCommentSince() {
+  String since = saCmtSeen;
+  time_t now = time(nullptr);
+  if (now > 1700000000) {
+    time_t limit = now - 2 * 86400;
+    struct tm t;
+    gmtime_r(&limit, &t);
+    char buf[24];
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &t);
+    if (String(buf) > since) since = buf;
+  }
+  return since;
+}
+
+bool saFetchComment(PendingEvent &e) {
+  if (e.designId == 0) return false;
+  JsonDocument filter;
+  JsonObject c = filter["hits"][0]["comment"].to<JsonObject>();
+  c["content"] = true;
+  c["createTime"] = true;
+  c["user"]["uid"] = true;
+  c["user"]["name"] = true;
+  JsonObject r = c["commentReply"][0].to<JsonObject>();
+  r["content"] = true;
+  r["createTime"] = true;
+  r["user"]["uid"] = true;
+  r["user"]["name"] = true;
+  JsonDocument doc;
+  String error;
+  String url = "https://makerworld.com/api/v1/comment-service/commentandrating?designId=" + String(e.designId) +
+               "&limit=10&msgId=0&msgType=0";
+  if (saGetJson(url, filter, doc, error) != 200) {
+    Serial.println("Comment not read: " + error);
+    return false;
+  }
+  uint64_t myUid = strtoull(sa.uid.c_str(), nullptr, 10);
+  String best = saSimComment ? String("") : saCommentSince();
+  bool found = false;
+  auto consider = [&](JsonObject x) {
+    if (x.isNull() || x["user"]["uid"].as<uint64_t>() == myUid) return;   // scritto da te
+    String t = x["createTime"] | "";
+    if (t > best) {
+      best = t;
+      e.author = x["user"]["name"] | "";
+      e.text = x["content"] | "";
+      found = true;
+    }
+  };
+  for (JsonObject h : doc["hits"].as<JsonArray>()) {
+    JsonObject cm = h["comment"];
+    consider(cm);
+    for (JsonObject rp : cm["commentReply"].as<JsonArray>()) consider(rp);
+  }
+  if (!found) {
+    Serial.println("New comment ignored (yours or already notified)");
+    return false;
+  }
+  e.text.replace("\n", " ");
+  e.text.trim();
+  if (best > saCmtSeen) {
+    saCmtSeen = best;
+    Preferences p;
+    p.begin("standalone", false);
+    p.putString("cmtSeen", saCmtSeen);
+    p.end();
+  }
+  Serial.println("New comment by " + e.author);
+  return true;
 }

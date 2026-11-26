@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.5.0
+
+### Added
+- *New comment* notification: author, beginning of the text and model cover on the display, full text on Telegram, `comment` event in Home Assistant. Your own replies and old comments are ignored
+- *Simulate* also shows the latest comment
+
+### Fixed
+- The `follower` event was not sent to Home Assistant
+
+### Note
+- After updating, the first check saves the starting values again (no notifications for that check)
+
 ## 3.4.0
 
 ### Added
